@@ -19,6 +19,7 @@ from aiogram.types import (CallbackQuery, InlineKeyboardButton, InlineKeyboardMa
                            KeyboardButton, Message, ReplyKeyboardMarkup)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import delete, func, select
+from sqlalchemy.exc import IntegrityError
 
 from . import eitaa
 from .botutil import (extract_content, fmt_dt, norm_digits, normalize_chat_id, parse_when,
@@ -96,7 +97,11 @@ class Guard(BaseMiddleware):
                 s.add(u)
             u.username = tg.username or ""
             u.name = tg.full_name or ""
-            await s.commit()
+            try:
+                await s.commit()
+            except IntegrityError:  # two updates of a brand-new user raced; the other one won
+                await s.rollback()
+                u = await s.get(User, tg.id)
         is_admin = tg.id in admins
         if u.banned and not is_admin:
             if isinstance(event, CallbackQuery):
