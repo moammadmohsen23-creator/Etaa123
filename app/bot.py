@@ -285,7 +285,10 @@ async def cb_chan_add(c: CallbackQuery, state: FSMContext):
         await c.answer("حداکثر ۲۰ کانال مجاز است.", show_alert=True)
         return
     await state.set_state(AddChannel.chat_id)
-    await c.message.answer("شناسه کانال/گروه را بفرستید:\n• شناسه عددی (مثل <code>1404</code>)\n"
+    await c.message.answer("شناسه کانال/گروه را بفرستید.\n\n"
+                           "⚠️ کانال باید اول در <b>پنل eitaayar.ir ← کانال‌ها</b> اضافه شده باشد "
+                           "(با حساب خودتان). بهترین کار: همان <b>شناسه عددی</b> که پنل کنار کانال نشان می‌دهد "
+                           "(مثل <code>1404</code>).\n"
                            "• یا یوزرنیم بدون @ (مثل <code>eitaayar</code>)\n"
                            "• برای گروه: لینک دعوت\n\nلغو: /cancel")
     await c.answer()
@@ -315,8 +318,9 @@ async def st_chan_id(m: Message, state: FSMContext):
                f"نام: <b>{escape(info['title'])}</b>\nشناسه: <code>{safe_id}</code>")
         if info["desc"]:
             txt += f"\n\n{escape(info['desc'])}"
-        txt += ("\n\n⚠️ برای ارسال، ایتایار باید در این کانال/گروه <b>ادمین</b> باشد؛ "
-                "این بررسی فقط وجود آن را تأیید می‌کند.")
+        txt += ("\n\n⚠️ این بررسی فقط وجود کانال در ایتا را تأیید می‌کند. برای ارسال، همین کانال باید "
+                "در <b>پنل eitaayar.ir ← کانال‌ها</b> حساب شما ثبت شده باشد؛ اگر ثبت نیست، ارسال "
+                "«chat not found» می‌دهد.")
         kb = ikb([[("✅ افزودن", "ch:ok")], [("✏️ نام دلخواه", "ch:rename"), ("❌ لغو", "ch:cancel")]])
     elif info["exists"] is False:
         txt = (f"❌ کانال یا گروهی با شناسه <code>{safe_id}</code> پیدا نشد.\n\n"

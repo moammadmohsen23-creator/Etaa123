@@ -91,6 +91,12 @@ async def _notify(manager, post: Post, chan: Channel, ok: bool, err: str = "") -
     else:
         msg = (f"❌ ارسال پست «{label}» به کانال <b>{escape(chan.title)}</b> ناموفق بود.\n"
                f"<code>{escape(err[:500])}</code>")
+        if "chat not found" in err.lower():
+            msg += ("\n\n💡 یعنی ایتایار این کانال را در پنل شما پیدا نکرده است. راه حل:\n"
+                    "۱) در پنل eitaayar.ir وارد بخش «کانال‌ها» شوید و کانال خودتان را اضافه کنید "
+                    "(باید مدیر آن کانال باشید).\n"
+                    "۲) <b>شناسه عددی</b> همان کانال را از پنل کپی کنید (مثل 1404).\n"
+                    "۳) در ربات کانال قبلی را حذف و با همان شناسه عددی دوباره اضافه کنید.")
     try:
         await manager.bot.send_message(post.user_id, msg)
     except Exception:
