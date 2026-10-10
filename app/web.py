@@ -10,7 +10,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy import func, select
 
-from . import config
+from . import config, rubika
 from .bot import manager
 from .botutil import fmt_dt
 from .db import (DEFAULTS, Payment, Post, Session, User, get_settings, parse_ids, parse_plans,
@@ -94,7 +94,8 @@ async def dashboard(request: Request):
     cfg = await get_settings()
     return render(request, "dashboard.html", stats=dict(users=users, active=active, pending=pending,
                   sent=sent, failed=failed, pays=pays), recent=recent,
-                  token_set=bool(cfg["bot_token"]), admins=len(parse_ids(cfg["admin_ids"])))
+                  token_set=bool(cfg["bot_token"]), rubika_set=bool(cfg["rubika_bot_token"]),
+                  admins=len(parse_ids(cfg["admin_ids"])))
 
 
 # ------------------------------------------------------------------ settings
@@ -104,11 +105,13 @@ async def settings_page(request: Request):
         return back(request, "/login")
     cfg = await get_settings()
     token_hint = ("••••" + cfg["bot_token"][-4:]) if cfg["bot_token"] else ""
-    return render(request, "settings.html", cfg=cfg, token_hint=token_hint)
+    rb_hint = ("••••" + cfg["rubika_bot_token"][-4:]) if cfg["rubika_bot_token"] else ""
+    return render(request, "settings.html", cfg=cfg, token_hint=token_hint, rb_hint=rb_hint)
 
 
 @router.post("/settings")
 async def settings_save(request: Request, csrf: str = Form(""), bot_token: str = Form(""),
+                        rubika_bot_token: str = Form(""),
                         admin_ids: str = Form(""), brand_name: str = Form(""),
                         welcome_text: str = Form(""), support_username: str = Form(""),
                         card_number: str = Form(""), card_owner: str = Form(""),
@@ -129,10 +132,18 @@ async def settings_save(request: Request, csrf: str = Form(""), bot_token: str =
               "trial_days": trial_days.strip(), "plans": plans.strip()}
     if bot_token.strip():  # blank = keep the stored token
         values["bot_token"] = bot_token.strip()
+    rb_note = ""
+    if rubika_bot_token.strip():
+        try:
+            me = await rubika.get_me(rubika_bot_token.strip())
+            values["rubika_bot_token"] = rubika_bot_token.strip()
+            rb_note = f" · روبیکا: @{me.get('username') or me.get('bot_title') or 'متصل'}"
+        except rubika.RubikaError as e:
+            rb_note = f" · توکن روبیکا پذیرفته نشد ({str(e)[:80]})"
     await save_settings(values)
     ok = await manager.start()
-    msg = (f"ذخیره شد و ربات @{manager.username} روشن شد ✅" if ok
-           else f"ذخیره شد، اما ربات روشن نشد: {manager.error}")
+    msg = ((f"ذخیره شد؛ ربات @{manager.username} روشن شد" if ok
+            else f"ذخیره شد، اما ربات روشن نشد: {manager.error}") + rb_note)
     return back(request, "/settings", msg)
 
 
@@ -143,7 +154,7 @@ async def bot_restart(request: Request, csrf: str = Form("")):
     if not check_csrf(request, csrf):
         return back(request, "/", "نشست منقضی شد.")
     ok = await manager.start()
-    return back(request, "/", "ربات دوباره راه‌اندازی شد ✅" if ok else f"خطا: {manager.error}")
+    return back(request, "/", "ربات دوباره راه‌اندازی شد" if ok else f"خطا: {manager.error}")
 
 
 # ------------------------------------------------------------------ users

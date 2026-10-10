@@ -5,9 +5,9 @@ from html import escape
 
 from sqlalchemy import select, update
 
-from . import eitaa
+from . import eitaa, rubika
 from .crypto import dec
-from .db import Channel, Post, Session, User, utcnow
+from .db import Channel, Post, Session, User, get_settings, utcnow
 
 log = logging.getLogger("scheduler")
 POLL_SECONDS = 10
@@ -35,6 +35,18 @@ async def _deliver(post: Post, token: str, chat_id: str, bot) -> dict:
                                  caption=post.text or None, **kw)
 
 
+async def _deliver_rubika(post: Post, token: str, chat_id: str, bot) -> dict:
+    if post.kind == "text":
+        return await rubika.send_message(token, chat_id, post.text, silent=post.silent)
+    if bot is None:
+        raise rubika.RubikaError("ربات تلگرام فعال نیست؛ دانلود فایل ممکن نشد")
+    buf = await bot.download(post.file_id)
+    if buf is None:
+        raise rubika.RubikaError("دانلود فایل از تلگرام ناموفق بود")
+    return await rubika.send_file(token, chat_id, post.file_name or "file", buf.read(),
+                                  caption=post.text or None)
+
+
 async def process_post(post_id: int, manager) -> None:
     async with Session() as s:
         post = await s.get(Post, post_id)
@@ -43,20 +55,28 @@ async def process_post(post_id: int, manager) -> None:
     if not (user and chan):
         await _finish(post_id, "failed", "کاربر یا کانال حذف شده است")
         return
-    token = dec(user.eitaa_token_enc)
+    is_rb = chan.platform == "rubika"
+    if is_rb:
+        token = (await get_settings())["rubika_bot_token"].strip()
+        missing = "ربات روبیکا هنوز توسط مدیر فعال نشده است"
+    else:
+        token = dec(user.eitaa_token_enc)
+        missing = "توکن ایتایار تنظیم نشده است"
     if not token:
-        await _finish(post_id, "failed", "توکن ایتایار تنظیم نشده است")
-        await _notify(manager, post, chan, ok=False, err="توکن ایتایار تنظیم نشده است")
+        await _finish(post_id, "failed", missing)
+        await _notify(manager, post, chan, ok=False, err=missing)
         return
+    deliver = _deliver_rubika if is_rb else _deliver
+    net_err = rubika.RubikaNetworkError if is_rb else eitaa.EitaaNetworkError
 
     error = ""
     result: dict = {}
     for attempt in range(1, RETRIES + 1):
         try:
-            result = await _deliver(post, token, chan.chat_id, manager.bot)
+            result = await deliver(post, token, chan.chat_id, manager.bot)
             error = ""
             break
-        except eitaa.EitaaNetworkError as e:
+        except net_err as e:
             error = f"خطای شبکه: {e}"
             await asyncio.sleep(5 * attempt)
         except Exception as e:  # EitaaError or anything else: no retry
@@ -91,7 +111,10 @@ async def _notify(manager, post: Post, chan: Channel, ok: bool, err: str = "") -
     else:
         msg = (f"❌ ارسال پست «{label}» به کانال <b>{escape(chan.title)}</b> ناموفق بود.\n"
                f"<code>{escape(err[:500])}</code>")
-        if "chat not found" in err.lower():
+        if chan.platform == "rubika":
+            msg += ("\n\nمطمئن شوید ربات روبیکا هنوز در کانال <b>ادمین</b> است و اجازه‌ی ارسال پیام دارد؛ "
+                    "در غیر این صورت کانال را حذف و دوباره متصل کنید.")
+        elif "chat not found" in err.lower():
             msg += ("\n\n💡 یعنی ایتایار این کانال را در پنل شما پیدا نکرده است. راه حل:\n"
                     "۱) در پنل eitaayar.ir وارد بخش «کانال‌ها» شوید و کانال خودتان را اضافه کنید "
                     "(باید مدیر آن کانال باشید).\n"

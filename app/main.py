@@ -13,6 +13,7 @@ from . import config
 from .bot import manager
 from .db import init_db
 from .scheduler import scheduler_loop
+from .rubika_hub import hub_loop
 from .web import router
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -24,10 +25,11 @@ logging.getLogger("httpcore").setLevel(logging.WARNING)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    sched = None
+    sched = hub = None
     if not config.MISSING:
         await init_db()
         sched = asyncio.create_task(scheduler_loop(manager))
+        hub = asyncio.create_task(hub_loop(manager))
         ok = await manager.start()
         if not ok:
             log.warning("bot not started: %s", manager.error)
@@ -36,10 +38,11 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
-        if sched:
-            sched.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await sched
+        for t in (sched, hub):
+            if t:
+                t.cancel()
+                with contextlib.suppress(asyncio.CancelledError, Exception):
+                    await t
         await manager.stop()
 
 

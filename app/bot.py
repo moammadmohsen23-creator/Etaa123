@@ -21,7 +21,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
-from . import eitaa
+from . import eitaa, rubika, rubika_hub
 from .botutil import (extract_content, fmt_dt, norm_digits, normalize_chat_id, parse_when,
                       to_utc_naive)
 from .crypto import enc
@@ -31,12 +31,22 @@ from .db import (Channel, Payment, Post, Session, User, get_settings, parse_ids,
 log = logging.getLogger("bot")
 
 # ------------------------------------------------------------------ menus
-B_NEW, B_SCHED = "📝 پست جدید", "📅 زمان‌بندی‌شده‌ها"
-B_CHAN, B_TOKEN = "📢 کانال‌ها", "🔑 توکن ایتایار"
-B_BUY, B_ME = "💳 خرید اشتراک", "👤 حساب من"
-B_SUP, B_HELP = "☎️ پشتیبانی", "📖 راهنما"
-B_ADMIN = "🛠 مدیریت"
+B_NEW, B_SCHED = "پست جدید", "زمان‌بندی‌شده‌ها"
+B_CHAN, B_TOKEN = "کانال‌ها", "توکن ایتایار"
+B_BUY, B_ME = "اشتراک", "حساب من"
+B_SUP, B_HELP = "پشتیبانی", "راهنما"
+B_ADMIN = "مدیریت"
 MENU_TEXTS = {B_NEW, B_SCHED, B_CHAN, B_TOKEN, B_BUY, B_ME, B_SUP, B_HELP, B_ADMIN}
+_OLD = {B_NEW: "📝 پست جدید", B_SCHED: "📅 زمان‌بندی‌شده‌ها", B_CHAN: "📢 کانال‌ها",
+        B_TOKEN: "🔑 توکن ایتایار", B_BUY: "💳 خرید اشتراک", B_ME: "👤 حساب من",
+        B_SUP: "☎️ پشتیبانی", B_HELP: "📖 راهنما", B_ADMIN: "🛠 مدیریت"}
+
+
+def _btn(label: str):
+    return F.text.in_({label, _OLD[label]})
+
+
+PLAT = {"eitaa": "ایتا", "rubika": "روبیکا"}
 
 
 def menu_kb(is_admin: bool) -> ReplyKeyboardMarkup:
@@ -149,9 +159,9 @@ async def cmd_start(m: Message, state: FSMContext, is_admin: bool, cfg: dict):
     await state.clear()
     brand = escape(cfg["brand_name"])
     welcome = cfg["welcome_text"].strip() or (
-        "با این ربات می‌توانید متن، عکس، فیلم و فایل را به کانال‌های ایتا ارسال یا زمان‌بندی کنید.")
-    await m.answer(f"👋 به <b>{brand}</b> خوش آمدید!\n\n{escape(welcome)}\n\n"
-                   "برای شروع: ۱) توکن ایتایار را ثبت کنید ۲) کانال را اضافه کنید ۳) «پست جدید» را بزنید.",
+        "متن، عکس، فیلم و فایل را به کانال‌های ایتا و روبیکا ارسال یا زمان‌بندی کنید.")
+    await m.answer(f"<b>{brand}</b>\n\n{escape(welcome)}\n\n"
+                   "شروع: کانال را اضافه کنید، سپس «پست جدید».",
                    reply_markup=menu_kb(is_admin))
 
 
@@ -167,15 +177,18 @@ async def cmd_id(m: Message):
 async def btn_help(m: Message, state: FSMContext):
     await state.clear()
     await m.answer(
-        "📖 <b>راهنما</b>\n\n"
-        "🔑 <b>توکن:</b> در پنل <b>eitaayar.ir</b> ثبت‌نام کنید و توکن API را از آن‌جا بردارید و در بخش «توکن ایتایار» بفرستید.\n"
-        "📢 <b>کانال:</b> شناسه عددی یا یوزرنیم کانال (بدون @) را همان‌طور که در پنل ایتایار هست اضافه کنید. "
-        "کانال باید در پنل ایتایار تعریف شده باشد.\n"
-        "📝 <b>پست:</b> متن یا فایل را بفرستید، گزینه‌ها (عنوان، بی‌صدا، سنجاق، حذف با بازدید) را تنظیم و «ارسال» یا «زمان‌بندی» را بزنید.\n\n"
-        "⏰ <b>فرمت زمان‌بندی (به وقت تهران):</b>\n"
-        "<code>18:30</code> · <code>فردا 09:00</code> · <code>+45</code> (۴۵ دقیقه بعد) · "
+        "<b>راهنما</b>\n\n"
+        "<b>ایتا</b>\n"
+        "توکن را از eitaayar.ir بگیرید و در «توکن ایتایار» ثبت کنید. کانال باید در پنل ایتایار تعریف شده باشد؛ "
+        "شناسه‌ی عددی آن را در «کانال‌ها» وارد کنید.\n\n"
+        "<b>روبیکا</b>\n"
+        "«کانال‌ها ← افزودن ← روبیکا» را بزنید، ربات را ادمین کانال کنید و کد را داخل کانال بفرستید.\n\n"
+        "<b>پست</b>\n"
+        "متن یا فایل را بفرستید و «ارسال» یا «زمان‌بندی» را بزنید.\n\n"
+        "<b>فرمت زمان</b> (وقت تهران)\n"
+        "<code>18:30</code> · <code>فردا 09:00</code> · <code>+45</code> · "
         "<code>+2 ساعت</code> · <code>1405/07/20 18:30</code>\n\n"
-        "/cancel لغو عملیات · /id آیدی عددی شما")
+        "/cancel لغو · /id آیدی شما")
 
 
 async def btn_support(m: Message, state: FSMContext, cfg: dict):
@@ -193,14 +206,14 @@ async def btn_me(m: Message, state: FSMContext, is_admin: bool):
         sent = (await s.execute(select(func.count()).select_from(Post).where(
             Post.user_id == m.from_user.id, Post.status == "sent"))).scalar_one()
     if is_admin:
-        sub = "♾ مدیر (نامحدود)"
+        sub = "نامحدود (مدیر)"
     elif has_access(u, False):
-        sub = f"✅ فعال تا {fmt_dt(u.expires_at)}"
+        sub = f"فعال تا {fmt_dt(u.expires_at)}"
     else:
-        sub = "❌ منقضی / غیرفعال"
-    tok = f"✅ متصل ({escape(u.eitaa_account)})" if u.eitaa_token_enc else "❌ ثبت نشده"
-    await m.answer(f"👤 <b>حساب من</b>\n\nآیدی: <code>{u.id}</code>\nاشتراک: {sub}\nتوکن ایتایار: {tok}\n"
-                   f"کانال‌ها: {len(chans)}\nدر صف ارسال: {pend}\nارسال‌شده: {sent}")
+        sub = "منقضی"
+    tok = escape(u.eitaa_account) if u.eitaa_token_enc else "ثبت نشده"
+    await m.answer(f"<b>حساب من</b>\n\nآیدی: <code>{u.id}</code>\nاشتراک: {sub}\nتوکن ایتایار: {tok}\n"
+                   f"کانال‌ها: {len(chans)}\nدر صف: {pend} · ارسال‌شده: {sent}")
 
 
 # ------------------------------------------------------------------ token
@@ -263,8 +276,8 @@ async def st_token(m: Message, state: FSMContext, is_admin: bool):
 
 # ------------------------------------------------------------------ channels
 def _chan_kb(chans: list[Channel]) -> InlineKeyboardMarkup:
-    rows = [[(f"🗑 {c.title}", f"ch:del:{c.id}")] for c in chans]
-    rows.append([("➕ افزودن کانال", "ch:add")])
+    rows = [[(f"حذف · {c.title} ({PLAT.get(c.platform, c.platform)})", f"ch:del:{c.id}")] for c in chans]
+    rows.append([("+ افزودن کانال", "ch:add")])
     return ikb(rows)
 
 
@@ -272,10 +285,10 @@ async def btn_channels(m: Message, state: FSMContext):
     await state.clear()
     chans = await user_channels(m.from_user.id)
     if chans:
-        lines = "\n".join(f"• <b>{escape(c.title)}</b> — <code>{escape(c.chat_id)}</code>" for c in chans)
-        txt = f"📢 <b>کانال‌های شما</b>\n\n{lines}\n\nبرای حذف روی نام کانال بزنید."
+        lines = "\n".join(f"• <b>{escape(c.title)}</b> · {PLAT.get(c.platform, c.platform)}" for c in chans)
+        txt = f"<b>کانال‌های شما</b>\n\n{lines}"
     else:
-        txt = "📢 هنوز کانالی اضافه نکرده‌اید."
+        txt = "هنوز کانالی اضافه نکرده‌اید."
     await m.answer(txt, reply_markup=_chan_kb(chans))
 
 
@@ -284,53 +297,105 @@ async def cb_chan_add(c: CallbackQuery, state: FSMContext):
     if len(chans) >= 20:
         await c.answer("حداکثر ۲۰ کانال مجاز است.", show_alert=True)
         return
-    await state.set_state(AddChannel.chat_id)
-    await c.message.answer("شناسه کانال/گروه را بفرستید.\n\n"
-                           "⚠️ کانال باید اول در <b>پنل eitaayar.ir ← کانال‌ها</b> اضافه شده باشد "
-                           "(با حساب خودتان). بهترین کار: همان <b>شناسه عددی</b> که پنل کنار کانال نشان می‌دهد "
-                           "(مثل <code>1404</code>).\n"
-                           "• یا یوزرنیم بدون @ (مثل <code>eitaayar</code>)\n"
-                           "• برای گروه: لینک دعوت\n\nلغو: /cancel")
+    await c.message.answer("کانال مربوط به کدام پیام‌رسان است؟",
+                           reply_markup=ikb([[("ایتا", "ch:p:eitaa"), ("روبیکا", "ch:p:rubika")]]))
     await c.answer()
 
 
-KIND_FA = {"channel": "📢 کانال", "group": "👥 گروه", "private": "🔒 گروه/کانال خصوصی",
-           "unknown": "❓ نوع نامشخص"}
+async def cb_chan_platform(c: CallbackQuery, state: FSMContext):
+    plat = c.data.split(":")[2]
+    await state.set_state(AddChannel.chat_id)
+    await state.update_data(platform=plat, chat_id="", found_title="")
+    if plat == "eitaa":
+        await safe_edit(c.message,
+                        "شناسه‌ی کانال را بفرستید.\n\n"
+                        "کانال باید قبلاً در <b>پنل eitaayar.ir ← کانال‌ها</b> ثبت شده باشد. "
+                        "بهتر است شناسه‌ی عددی همان‌جا (مثل <code>1404</code>) یا یوزرنیم بدون @ را بدهید. "
+                        "برای گروه: لینک دعوت.\n\nلغو: /cancel")
+        await c.answer()
+        return
+    cfg = await get_settings()
+    token = cfg["rubika_bot_token"].strip()
+    if not token:
+        await state.clear()
+        await safe_edit(c.message, "اتصال روبیکا هنوز فعال نشده است. با پشتیبانی تماس بگیرید.")
+        await c.answer()
+        return
+    try:
+        me = await rubika.get_me(token)
+    except rubika.RubikaError:
+        me = {}
+    uname = me.get("username") or ""
+    bot_ref = f"@{escape(uname)}" if uname else "ربات روبیکا"
+    code = rubika_hub.new_code(c.from_user.id)
+    await safe_edit(c.message,
+                    f"<b>اتصال کانال روبیکا</b>\n\n"
+                    f"۱. {bot_ref} را به کانال اضافه و <b>ادمین</b> کنید.\n"
+                    f"۲. این کد را داخل کانال بفرستید:\n<code>{code}</code>\n\n"
+                    "کد ۱۵ دقیقه اعتبار دارد و بعد از اتصال خودکار پاک می‌شود.\n"
+                    "یا شناسه‌ی کانال (مثل <code>c0B1...</code>) را همین‌جا بفرستید.\n\nلغو: /cancel")
+    await c.answer()
 
 
-async def _save_channel(uid: int, chat_id: str, title: str) -> None:
+KIND_FA = {"channel": "کانال", "group": "گروه", "private": "گروه/کانال خصوصی", "user": "گفتگوی خصوصی",
+           "unknown": "نوع نامشخص"}
+
+
+async def _save_channel(uid: int, chat_id: str, title: str, platform: str = "eitaa") -> None:
     async with Session() as s:
-        s.add(Channel(user_id=uid, chat_id=chat_id, title=title[:100] or chat_id))
+        s.add(Channel(user_id=uid, chat_id=chat_id, title=title[:100] or chat_id, platform=platform))
         await s.commit()
 
 
+async def _rubika_lookup(m: Message, state: FSMContext, cid: str):
+    token = (await get_settings())["rubika_bot_token"].strip()
+    if not rubika.looks_like_guid(cid):
+        await m.answer("شناسه‌ی معتبر نیست. کد را داخل کانال بفرستید، یا شناسه‌ای مثل <code>c0B1...</code> بدهید.")
+        return
+    info = await rubika.lookup_chat(token, cid) if token else {"exists": False}
+    await state.update_data(chat_id=cid, found_title=info.get("title", ""))
+    if info["exists"] is True:
+        txt = (f"پیدا شد\n\nنوع: {KIND_FA.get(info['kind'], KIND_FA['unknown'])}\n"
+               f"نام: <b>{escape(info['title'])}</b>\n\nربات باید در این چت ادمین باشد تا ارسال کار کند.")
+        kb = ikb([[("افزودن", "ch:ok")], [("نام دلخواه", "ch:rename"), ("لغو", "ch:cancel")]])
+    elif info["exists"] is False:
+        txt = ("پیدا نشد. یا شناسه اشتباه است یا ربات روبیکا هنوز عضو/ادمین آن چت نیست.")
+        kb = ikb([[("لغو", "ch:cancel")]])
+    else:
+        txt = "اتصال به روبیکا برقرار نشد. کمی بعد دوباره تلاش کنید."
+        kb = ikb([[("افزودن بدون بررسی", "ch:force")], [("لغو", "ch:cancel")]])
+    await m.answer(txt, reply_markup=kb)
+
+
 async def st_chan_id(m: Message, state: FSMContext):
+    d = await state.get_data()
+    if d.get("platform") == "rubika":
+        await _rubika_lookup(m, state, (m.text or "").strip())
+        return
     cid = normalize_chat_id(m.text or "")
     if not cid or len(cid) > 120:
-        await m.answer("❌ شناسه نامعتبر است. دوباره بفرستید.")
+        await m.answer("شناسه نامعتبر است. دوباره بفرستید.")
         return
-    wait = await m.answer("🔎 در حال بررسی...")
+    wait = await m.answer("در حال بررسی...")
     info = await eitaa.lookup_chat(cid)
-    await state.update_data(chat_id=cid, found_title=info["title"])
+    await state.update_data(chat_id=cid, found_title=info["title"], platform="eitaa")
     safe_id = escape(cid)
     if info["exists"] is True:
-        txt = (f"✅ پیدا شد\n\nنوع: {KIND_FA.get(info['kind'], KIND_FA['unknown'])}\n"
+        txt = (f"پیدا شد\n\nنوع: {KIND_FA.get(info['kind'], KIND_FA['unknown'])}\n"
                f"نام: <b>{escape(info['title'])}</b>\nشناسه: <code>{safe_id}</code>")
         if info["desc"]:
             txt += f"\n\n{escape(info['desc'])}"
-        txt += ("\n\n⚠️ این بررسی فقط وجود کانال در ایتا را تأیید می‌کند. برای ارسال، همین کانال باید "
-                "در <b>پنل eitaayar.ir ← کانال‌ها</b> حساب شما ثبت شده باشد؛ اگر ثبت نیست، ارسال "
-                "«chat not found» می‌دهد.")
-        kb = ikb([[("✅ افزودن", "ch:ok")], [("✏️ نام دلخواه", "ch:rename"), ("❌ لغو", "ch:cancel")]])
+        txt += ("\n\nاین بررسی فقط وجود کانال در ایتا را تأیید می‌کند. برای ارسال، کانال باید در "
+                "<b>پنل eitaayar.ir ← کانال‌ها</b> ثبت شده باشد.")
+        kb = ikb([[("افزودن", "ch:ok")], [("نام دلخواه", "ch:rename"), ("لغو", "ch:cancel")]])
     elif info["exists"] is False:
-        txt = (f"❌ کانال یا گروهی با شناسه <code>{safe_id}</code> پیدا نشد.\n\n"
-               "شناسه/لینک را بررسی کنید و دوباره بفرستید، یا اگر مطمئن هستید با همین شناسه اضافه کنید.")
-        kb = ikb([[("افزودن با همین شناسه", "ch:force")], [("❌ لغو", "ch:cancel")]])
+        txt = (f"کانالی با شناسه <code>{safe_id}</code> پیدا نشد.\n\n"
+               "شناسه را بررسی و دوباره بفرستید، یا اگر مطمئن هستید همین را اضافه کنید.")
+        kb = ikb([[("افزودن با همین شناسه", "ch:force")], [("لغو", "ch:cancel")]])
     else:
-        txt = (f"⚠️ نتوانستم این شناسه را بررسی کنم (<code>{safe_id}</code>). "
-               "شناسه‌ی عددی یا خطای اتصال ممکن است دلیل باشد.\n"
-               "اگر مطمئن هستید اضافه کنید، یا شناسه‌ی دیگری بفرستید.")
-        kb = ikb([[("افزودن بدون بررسی", "ch:force")], [("❌ لغو", "ch:cancel")]])
+        txt = (f"بررسی <code>{safe_id}</code> ممکن نشد (شناسه‌ی عددی یا خطای اتصال). "
+               "اگر مطمئن هستید اضافه کنید.")
+        kb = ikb([[("افزودن بدون بررسی", "ch:force")], [("لغو", "ch:cancel")]])
     with contextlib.suppress(Exception):
         await wait.delete()
     await m.answer(txt, reply_markup=kb)
@@ -342,20 +407,22 @@ async def cb_chan_ok(c: CallbackQuery, state: FSMContext, is_admin: bool):
         await c.answer("منقضی شد؛ دوباره شروع کنید.", show_alert=True)
         return
     title = d.get("found_title") or d["chat_id"]
-    await _save_channel(c.from_user.id, d["chat_id"], title)
+    await _save_channel(c.from_user.id, d["chat_id"], title, d.get("platform", "eitaa"))
+    rubika_hub.cancel(c.from_user.id)
     await state.clear()
-    await safe_edit(c.message, f"✅ «{escape(title)}» اضافه شد.")
-    await c.message.answer("از منو ادامه دهید 👇", reply_markup=menu_kb(is_admin))
+    await safe_edit(c.message, f"«{escape(title)}» اضافه شد.")
+    await c.message.answer("از منو ادامه دهید.", reply_markup=menu_kb(is_admin))
     await c.answer()
 
 
 async def cb_chan_rename(c: CallbackQuery, state: FSMContext):
     await state.set_state(AddChannel.title)
-    await c.message.answer("یک نام دلخواه بفرستید (یا «-» برای نام پیش‌فرض):")
+    await c.message.answer("یک نام دلخواه بفرستید («-» برای نام پیش‌فرض):")
     await c.answer()
 
 
 async def cb_chan_cancel(c: CallbackQuery, state: FSMContext):
+    rubika_hub.cancel(c.from_user.id)
     await state.clear()
     await safe_edit(c.message, "لغو شد.")
     await c.answer()
@@ -366,9 +433,10 @@ async def st_chan_title(m: Message, state: FSMContext, is_admin: bool):
     t = (m.text or "").strip()
     default = d.get("found_title") or d["chat_id"]
     title = default if t in ("-", "") else t[:100]
-    await _save_channel(m.from_user.id, d["chat_id"], title)
+    await _save_channel(m.from_user.id, d["chat_id"], title, d.get("platform", "eitaa"))
+    rubika_hub.cancel(m.from_user.id)
     await state.clear()
-    await m.answer(f"✅ کانال «{escape(title)}» اضافه شد.", reply_markup=menu_kb(is_admin))
+    await m.answer(f"«{escape(title)}» اضافه شد.", reply_markup=menu_kb(is_admin))
 
 
 async def cb_chan_del(c: CallbackQuery):
@@ -381,49 +449,79 @@ async def cb_chan_del(c: CallbackQuery):
             await s.execute(delete(Channel).where(Channel.id == cid))
             await s.commit()
     chans = await user_channels(c.from_user.id)
-    await safe_edit(c.message, "🗑 حذف شد (پست‌های زمان‌بندی‌شده‌ی آن هم لغو شدند).", _chan_kb(chans))
+    await safe_edit(c.message, "حذف شد (پست‌های زمان‌بندی‌شده‌ی آن هم لغو شدند).", _chan_kb(chans))
     await c.answer()
 
 
 # ------------------------------------------------------------------ new post
 def builder_view(d: dict) -> tuple[str, InlineKeyboardMarkup]:
+    rb = d.get("platform") == "rubika"
     if d["kind"] == "text":
         prev = escape(d["text"][:200]) + ("…" if len(d["text"]) > 200 else "")
-        what = f"📝 متن:\n{prev}"
+        what = prev
     else:
         cap = escape(d["text"][:120])
-        what = f"📎 فایل: <code>{escape(d['file_name'])}</code>" + (f"\nکپشن: {cap}" if cap else "")
-    on = lambda v: "روشن ✅" if v else "خاموش"  # noqa: E731
-    txt = (f"{what}\n\n📢 کانال: <b>{escape(d['channel_title'])}</b>\n"
-           f"🏷 عنوان (فقط پنل ایتایار): {escape(d['title']) or '—'}\n"
-           f"🔕 بی‌صدا: {on(d['silent'])}\n📌 سنجاق: {on(d['pin'])}\n"
-           f"👁 حذف خودکار با بازدید: {d['view'] or 'غیرفعال'}")
-    kb = ikb([[("🚀 ارسال الان", "np:now"), ("📅 زمان‌بندی", "np:sched")],
-              [("🏷 عنوان", "np:title"), ("👁 حذف با بازدید", "np:view")],
-              [(f"🔕 بی‌صدا: {on(d['silent'])}", "np:silent"), (f"📌 سنجاق: {on(d['pin'])}", "np:pin")],
-              [("❌ انصراف", "np:cancel")]])
-    return txt, kb
+        what = f"فایل: <code>{escape(d['file_name'])}</code>" + (f"\n{cap}" if cap else "")
+    on = lambda v: "روشن" if v else "خاموش"  # noqa: E731
+    lines = [what, "", f"کانال: <b>{escape(d['channel_title'])}</b> · {PLAT.get(d.get('platform', 'eitaa'))}"]
+    rows = [[("ارسال الان", "np:now"), ("زمان‌بندی", "np:sched")]]
+    if rb:
+        if d["kind"] == "text":
+            lines.append(f"بی‌صدا: {on(d['silent'])}")
+            rows.append([(f"بی‌صدا: {on(d['silent'])}", "np:silent")])
+    else:
+        lines += [f"عنوان (فقط پنل ایتایار): {escape(d['title']) or '—'}",
+                  f"بی‌صدا: {on(d['silent'])} · سنجاق: {on(d['pin'])}",
+                  f"حذف خودکار با بازدید: {d['view'] or 'غیرفعال'}"]
+        rows += [[("عنوان", "np:title"), ("حذف با بازدید", "np:view")],
+                 [(f"بی‌صدا: {on(d['silent'])}", "np:silent"), (f"سنجاق: {on(d['pin'])}", "np:pin")]]
+    rows.append([("انصراف", "np:cancel")])
+    return "\n".join(lines), ikb(rows)
+
+
+async def _channel_block(u: User, ch: Channel) -> str | None:
+    """Why a post to this channel can't be made right now (None = ready)."""
+    if ch.platform == "rubika":
+        if not (await get_settings())["rubika_bot_token"].strip():
+            return "ارسال به روبیکا هنوز فعال نشده است."
+        return None
+    if not u.eitaa_token_enc:
+        return "برای کانال‌های ایتا ابتدا «توکن ایتایار» را ثبت کنید."
+    return None
+
+
+async def _start_post(target: Message, state: FSMContext, u: User, ch: Channel, edit: bool = False) -> None:
+    block = await _channel_block(u, ch)
+    if block:
+        if edit:
+            await safe_edit(target, block)
+        else:
+            await target.answer(block)
+        return
+    await state.update_data(channel_id=ch.id, channel_title=ch.title, platform=ch.platform)
+    await state.set_state(NewPost.content)
+    txt = f"کانال: <b>{escape(ch.title)}</b> · {PLAT.get(ch.platform)}\n\nمتن یا فایل را بفرستید.\nلغو: /cancel"
+    if edit:
+        await safe_edit(target, txt)
+    else:
+        await target.answer(txt)
 
 
 async def btn_new(m: Message, state: FSMContext, is_admin: bool, cfg: dict):
     await state.clear()
     u = await get_user(m.from_user.id)
     if not has_access(u, is_admin):
-        await m.answer("⛔️ اشتراک شما فعال نیست. از «💳 خرید اشتراک» تمدید کنید.")
-        return
-    if not u.eitaa_token_enc:
-        await m.answer("ابتدا از «🔑 توکن ایتایار» توکن خود را ثبت کنید.")
+        await m.answer("اشتراک شما فعال نیست. از «اشتراک» تمدید کنید.")
         return
     chans = await user_channels(m.from_user.id)
     if not chans:
-        await m.answer("ابتدا از «📢 کانال‌ها» حداقل یک کانال اضافه کنید.")
+        await m.answer("ابتدا از «کانال‌ها» یک کانال اضافه کنید.")
         return
     if len(chans) == 1:
-        await state.update_data(channel_id=chans[0].id, channel_title=chans[0].title)
-        await state.set_state(NewPost.content)
-        await m.answer(f"کانال: <b>{escape(chans[0].title)}</b>\n\nمتن یا فایل (عکس/فیلم/صوت/سند/گیف) را بفرستید.\nلغو: /cancel")
+        await _start_post(m, state, u, chans[0])
         return
-    await m.answer("کدام کانال؟", reply_markup=ikb([[(c.title, f"np:ch:{c.id}")] for c in chans]))
+    await m.answer("کدام کانال؟", reply_markup=ikb(
+        [[(f"{c.title} · {PLAT.get(c.platform)}", f"np:ch:{c.id}")] for c in chans]))
 
 
 async def cb_np_channel(c: CallbackQuery, state: FSMContext):
@@ -433,9 +531,7 @@ async def cb_np_channel(c: CallbackQuery, state: FSMContext):
     if not ch or ch.user_id != c.from_user.id:
         await c.answer("کانال پیدا نشد.", show_alert=True)
         return
-    await state.update_data(channel_id=ch.id, channel_title=ch.title)
-    await state.set_state(NewPost.content)
-    await safe_edit(c.message, f"کانال: <b>{escape(ch.title)}</b>\n\nمتن یا فایل را بفرستید.\nلغو: /cancel")
+    await _start_post(c.message, state, await get_user(c.from_user.id), ch, edit=True)
     await c.answer()
 
 
@@ -512,7 +608,7 @@ async def cb_np_now(c: CallbackQuery, state: FSMContext, is_admin: bool):
         return
     pid = await _create_post(c.from_user.id, d, utcnow())
     await state.clear()
-    await safe_edit(c.message, f"🚀 پست #{pid} در صف ارسال قرار گرفت؛ نتیجه را همین‌جا اعلام می‌کنم.")
+    await safe_edit(c.message, f"پست #{pid} در صف ارسال قرار گرفت؛ نتیجه را همین‌جا اعلام می‌کنم.")
     await c.answer()
 
 
@@ -537,7 +633,7 @@ async def st_np_when(m: Message, state: FSMContext, is_admin: bool):
     run_utc = to_utc_naive(dt)
     pid = await _create_post(m.from_user.id, d, run_utc)
     await state.clear()
-    await m.answer(f"📅 پست #{pid} برای <b>{fmt_dt(run_utc)}</b> زمان‌بندی شد.", reply_markup=menu_kb(is_admin))
+    await m.answer(f"پست #{pid} برای <b>{fmt_dt(run_utc)}</b> زمان‌بندی شد.", reply_markup=menu_kb(is_admin))
 
 
 async def cb_np_cancel(c: CallbackQuery, state: FSMContext):
@@ -556,15 +652,15 @@ async def btn_sched(m: Message, state: FSMContext):
         chan = {c.id: c.title for c in (await s.execute(
             select(Channel).where(Channel.user_id == m.from_user.id))).scalars()}
     if not posts:
-        await m.answer("📅 پست زمان‌بندی‌شده‌ای ندارید.")
+        await m.answer("پست زمان‌بندی‌شده‌ای ندارید.")
         return
     lines, rows = [], []
     for p in posts:
         prev = escape((p.title or p.text or p.file_name)[:35])
         lines.append(f"#{p.id} · {fmt_dt(p.run_at)} · {escape(chan.get(p.channel_id, '؟'))}\n   {prev}")
         if p.status == "pending":
-            rows.append([(f"🗑 لغو #{p.id}", f"sp:del:{p.id}")])
-    await m.answer("📅 <b>پست‌های در صف</b>\n\n" + "\n".join(lines), reply_markup=ikb(rows) if rows else None)
+            rows.append([(f"لغو #{p.id}", f"sp:del:{p.id}")])
+    await m.answer("<b>پست‌های در صف</b>\n\n" + "\n".join(lines), reply_markup=ikb(rows) if rows else None)
 
 
 async def cb_sp_del(c: CallbackQuery):
@@ -781,15 +877,15 @@ def make_router() -> Router:
     M(cmd_ban, Command("ban"))
     M(cmd_unban, Command("unban"))
     M(cmd_broadcast, Command("broadcast"))
-    M(btn_new, F.text == B_NEW)
-    M(btn_sched, F.text == B_SCHED)
-    M(btn_channels, F.text == B_CHAN)
-    M(btn_token, F.text == B_TOKEN)
-    M(btn_buy, F.text == B_BUY)
-    M(btn_me, F.text == B_ME)
-    M(btn_support, F.text == B_SUP)
-    M(btn_help, F.text == B_HELP)
-    M(btn_admin, F.text == B_ADMIN)
+    M(btn_new, _btn(B_NEW))
+    M(btn_sched, _btn(B_SCHED))
+    M(btn_channels, _btn(B_CHAN))
+    M(btn_token, _btn(B_TOKEN))
+    M(btn_buy, _btn(B_BUY))
+    M(btn_me, _btn(B_ME))
+    M(btn_support, _btn(B_SUP))
+    M(btn_help, _btn(B_HELP))
+    M(btn_admin, _btn(B_ADMIN))
     # state inputs
     M(st_token, SetToken.token, F.text)
     M(st_chan_id, AddChannel.chat_id, F.text)
@@ -804,6 +900,7 @@ def make_router() -> Router:
     C(cb_token_set, F.data == "tk:set")
     C(cb_token_del, F.data == "tk:del")
     C(cb_chan_add, F.data == "ch:add")
+    C(cb_chan_platform, F.data.in_({"ch:p:eitaa", "ch:p:rubika"}))
     C(cb_chan_ok, F.data.in_({"ch:ok", "ch:force"}), AddChannel.chat_id)
     C(cb_chan_rename, F.data == "ch:rename", AddChannel.chat_id)
     C(cb_chan_cancel, F.data == "ch:cancel")

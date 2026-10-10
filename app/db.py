@@ -1,6 +1,7 @@
 from datetime import datetime, timezone
 
-from sqlalchemy import BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, select
+from sqlalchemy import (BigInteger, Boolean, DateTime, ForeignKey, Integer, String, Text, inspect,
+                        select, text)
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column
 
@@ -41,6 +42,7 @@ class Channel(Base):
     user_id: Mapped[int] = mapped_column(BigInteger, ForeignKey("users.id"), index=True)
     chat_id: Mapped[str] = mapped_column(String(128))
     title: Mapped[str] = mapped_column(String(128))
+    platform: Mapped[str] = mapped_column(String(10), default="eitaa", server_default="eitaa")  # eitaa | rubika
 
 
 class Post(Base):
@@ -84,13 +86,18 @@ Session = async_sessionmaker(engine, expire_on_commit=False)
 async def init_db() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # tiny migration: databases created before Rubika support lack channels.platform
+        cols = await conn.run_sync(lambda c: [x["name"] for x in inspect(c).get_columns("channels")])
+        if "platform" not in cols:
+            await conn.execute(text("ALTER TABLE channels ADD COLUMN platform VARCHAR(10) DEFAULT 'eitaa'"))
 
 
 # ---------------------------------------------------------------- settings
 DEFAULTS = {
     "bot_token": "",
+    "rubika_bot_token": "",
     "admin_ids": "",
-    "brand_name": "ربات ایتایار",
+    "brand_name": "ربات انتشار",
     "welcome_text": "",
     "support_username": "",
     "card_number": "",
@@ -98,7 +105,7 @@ DEFAULTS = {
     "trial_days": "3",
     "plans": "30:150000\n90:400000\n365:1400000",
 }
-SECRET_KEYS = {"bot_token"}
+SECRET_KEYS = {"bot_token", "rubika_bot_token"}
 
 
 async def get_settings(s: AsyncSession | None = None) -> dict[str, str]:
@@ -109,6 +116,8 @@ async def get_settings(s: AsyncSession | None = None) -> dict[str, str]:
             out[r.key] = dec(r.value) if r.key in SECRET_KEYS else r.value
         if not out["bot_token"] and config.ENV_BOT_TOKEN:
             out["bot_token"] = config.ENV_BOT_TOKEN
+        if not out["rubika_bot_token"] and config.ENV_RUBIKA_TOKEN:
+            out["rubika_bot_token"] = config.ENV_RUBIKA_TOKEN
         if not out["admin_ids"] and config.ENV_ADMIN_IDS:
             out["admin_ids"] = config.ENV_ADMIN_IDS
         return out
