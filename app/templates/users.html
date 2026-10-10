@@ -14,7 +14,7 @@
     <td>{% if u.expires_at and u.expires_at > now %}<span class="pill ok">{{ u.expires_at|jdate }}</span>
         {% else %}<span class="pill bad">منقضی</span>{% endif %}
         {% if u.banned %}<span class="pill bad">مسدود</span>{% endif %}</td>
-    <td>{{ '✅' if u.eitaa_token_enc else '—' }}</td>
+    <td>{{ 'بله' if u.eitaa_token_enc else '—' }}</td>
     <td><form method="post" action="/users/{{ u.id }}/days" class="row">
       <input type="hidden" name="csrf" value="{{ csrf }}">
       <input type="number" name="days" value="30"><button class="ok">اعمال</button></form></td>
